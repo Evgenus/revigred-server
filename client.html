@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1-beta1/jquery.js"
+            type="text/javascript"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/json5/0.3.0/json5.min.js"
+            type="text/javascript"></script>
+
+        <script type="text/javascript">
+            $(function() {
+                var isopen = false;
+                var username = null;
+                var socket = null;
+
+
+                var messages = $("#messages");
+
+                var writeMessage = function(owner, text) 
+                {
+                    messages.append(owner + ": " + text + "\n");
+                }
+                var writeEvent = function(text) 
+                {
+                    messages.append(text + "\n");
+                }
+
+
+                var sendMessage = function(name, args, kwargs) 
+                {
+                    socket.send(JSON5.stringify([name, args, kwargs]));
+                }
+
+                var sendText = function(text) 
+                {
+                    if (isopen) 
+                    {
+                        sendMessage("say", [text], {});
+                    } else {
+                        writeEvent("Connection not opened.")
+                    }
+                };
+
+                var message = $("#message");
+                $("#form").on("submit", function() 
+                {
+                    sendText(message.val());
+                    message.val("");
+                    return false;
+                });              
+
+                var api = {
+                    say: function(args, kwargs) {
+                        writeMessage(kwargs.name==username?"You":kwargs.name, args[0]);
+                    },
+                    auth: function(args, kwargs) {
+                        username = kwargs.name;
+                        $("#username").text(username);
+                    },
+                    notify: function(args, kwargs) {
+                        writeMessage("Server", args[0]);
+                    }
+                };
+
+                var initialize = function() 
+                {
+                    socket = new WebSocket("ws://127.0.0.1:9000");
+                    socket.binaryType = "arraybuffer";
+
+                    socket.onopen = function() 
+                    {
+                        writeEvent("Connected!");
+                        isopen = true;
+                    }
+
+                    socket.onmessage = function(e) 
+                    {
+                        if (typeof e.data == "string") 
+                        {
+                            var parts = JSON5.parse(e.data);
+                            name = parts[0];
+                            args = parts[1];
+                            kwargs = parts[2];
+                            api[name](args, kwargs);
+                        } else {
+                            writeEvent("Binary message received!");
+                        }
+                    }
+
+                    socket.onclose = function(e) 
+                    {
+                        writeEvent("Connection closed.");
+                        socket = null;
+                        isopen = false;
+                        setTimeout(function() {
+                            writeEvent("Reconnecting...");
+                            initialize();
+                        }, 1000);
+                    }
+                }
+                initialize();
+            });
+        </script>
+        <style>
+            #messages {
+                width: 500px;
+                height: 500px;
+            }
+
+            #message {
+                width: 400px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1 id="username">Anonymous</h1>
+        <textarea id="messages"></textarea>
+        <form id="form">
+            <input id="message" type="text"/>
+            <input type="submit" value="Send">
+        </form>
+    </body>
+</html>

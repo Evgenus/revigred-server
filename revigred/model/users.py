@@ -1,6 +1,11 @@
 import uuid
-import functools
-from .record import Record
+
+from revigred.record import Record
+
+__all__ = [
+    "User",
+    "Users",
+    ]
 
 class User:
     def __init__(self, model):
@@ -44,35 +49,4 @@ class Users:
     def broadcast(self, __name, *args, **kwargs):
         for id, user in self._users.items():
             user.send(__name, *args, **kwargs)
-
-# ____________________________________________________________________________ #
-
-class ChatUser(User):
-    def __init__(self, model, name):
-        super().__init__(model)
-        self.name = name
-
-    @property
-    def profile(self):
-        profile = super().profile
-        profile.name = self.name
-        return profile
-
-    def channel_opened(self):
-        super().channel_opened()
-        greeting = "{0} entered the chat".format(self.name)
-        self.model.broadcast("notify", greeting, name=self.name)
-
-    def on_say(self, text):
-        self.model.broadcast("say", text, name=self.name)
-
-class Chat(Users):
-    @staticmethod
-    def user_factory(self):
-        name = self.names_generator()
-        return ChatUser(self, name)
-
-    def __init__(self, names_generator):
-        super().__init__()
-        self.names_generator = names_generator
 

@@ -7,7 +7,7 @@ __all__ = [
     "Users",
     ]
 
-class User:
+class User(object):
     def __init__(self, model):
         self._protocol = None
         self.id = "USER-" + uuid.uuid4().hex
@@ -32,7 +32,7 @@ class User:
         message = (__name, args, kwargs)
         self._protocol.sendMessage(message)
 
-class Users:
+class Users(object):
     user_factory = User
 
     def __init__(self):

@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+from .users import Users
+
 __all__ = [
     "Port",
     "Node",
@@ -43,8 +45,8 @@ class Node(object):
         self._ports_by_name = {}
 
     @property
-    def ports(self):
-        yield from self._ports
+    def id(self):
+        return self._id
 
     def has_port(self, name):
         return name in self._ports_by_name
@@ -132,11 +134,12 @@ class NoSuchPortError(InvalidOperation):
 
 # ____________________________________________________________________________ #
 
-class Graph(object):
+class Graph(Users):
     node_factory = Node
     link_factory = Link
 
     def __init__(self):
+        super().__init__()
         self._rev = 0
         self._nodes_by_name = {}
         self._links_by_key = {}
@@ -235,8 +238,8 @@ class Graph(object):
         else:
             node = self.node_factory(id)
             self.add_node(node)
-            self.changePortsAll(node.get_ports())
-            self.changeStateAll(node.set_state())
+            self.changePortsAll(None, id, node.get_ports())
+            #self.changeStateAll(None, id, node.set_state())
             self.createNodeAll(origin, id)
 
     def on_nodeRemoved(self, origin, id):
@@ -301,7 +304,7 @@ class Graph(object):
     def _callAll(self, name, origin, *args, **kwargs):
         rev = self._increv()
         for user in self._users.values():
-            if origin.user is user:
+            if origin is not None and origin.user is user:
                 user.send(name, *args, rev=rev, origin=origin.rev, **kwargs)
             else:
                 user.send(name, *args, rev=rev, **kwargs)
@@ -318,16 +321,16 @@ class Graph(object):
     def removeNodeAll(self, origin, id):
         self._callAll("removeNode", origin, id)
 
-    def changeStateSelf(self, origin):
+    def changeStateSelf(self, origin, id, state):
         self._callSelf("changeState", origin, id, state)
 
-    def changeStateAll(self, origin):
+    def changeStateAll(self, origin, id, state):
         self._callAll("changeState", origin, id, state)
 
-    def changePortsSelf(self, origin):
+    def changePortsSelf(self, origin, id, ports):
         self._callSelf("changePorts", origin, id, ports)
 
-    def changePortsAll(self, origin):
+    def changePortsAll(self, origin, id, ports):
         self._callAll("changePorts", origin, id, ports)
 
     def addLinkSelf(self, origin, start_id, start_name, end_id, end_name):

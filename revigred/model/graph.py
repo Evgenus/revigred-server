@@ -263,7 +263,6 @@ class Graph(object):
             self.removeNodeAll(origin, id)
 
     #def on_nodeStateChanged(self, origin, id, state): pass
-    #def on_namesChanged(self, origin, id, names): pass
 
     def on_linkAdded(self, origin, start_id, start_name, end_id, end_name):
         try:

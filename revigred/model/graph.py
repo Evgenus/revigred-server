@@ -7,6 +7,7 @@ __all__ = [
     "Node",
     "Link",
     "Graph",
+    "GraphModel",
     "ResultException",
     "ConflictOccured",
     "InvalidOperation",
@@ -38,9 +39,22 @@ class Port(object):
             title=self._title,
             )
 
+class State(object):
+    def __init__(self):
+        self._data = {}
+
+    def serialize(self):
+        return self._data
+
+    def deserialize(self, data):
+        self._data = data
+
 class Node(object):
+    state_factory = State
+
     def __init__(self, id):
         self._id = id
+        self._state = self.state_factory()
         self._ports = []
         self._ports_by_name = {}
 
@@ -66,6 +80,9 @@ class Node(object):
 
     def get_ports(self):
         return [port.serialize() for port in self._ports]
+
+    def set_state(self):
+        return self._state.serialize()
 
 class Link(object):
     def __init__(self, start_id, start_name, end_id, end_name):
@@ -132,9 +149,7 @@ class NoSuchPortError(InvalidOperation):
         self.id = id
         self.name = name
 
-# ____________________________________________________________________________ #
-
-class Graph(Users):
+class Graph(object):
     node_factory = Node
     link_factory = Link
 
@@ -145,6 +160,12 @@ class Graph(Users):
         self._links_by_key = {}
         self._links_by_start_id = defaultdict(dict)
         self._links_by_end_id = defaultdict(dict)
+
+    @property
+    def rev(self):
+        old = self._rev
+        self._rev += 1
+        return old
 
     def has_node(self, id):
         return id in self._nodes_by_name
@@ -226,83 +247,98 @@ class Graph(Users):
         if not self.has_link(start_id, start_name, end_id, end_name):
             raise LinkAlreadyRemovedConflict(start_id, start_name, end_id, end_name)
 
-    # ======================================================================== #
+
+# ____________________________________________________________________________ #
+
+class GraphModel(Users):
+    graph_factory = Graph
+
+    def __init__(self):
+        super().__init__()
+        self._graph = self.graph_factory()
+
+    @property
+    def graph(self):
+        return self._graph
 
     def on_nodeCreated(self, origin, id):
         try:
-            self.check_create_node(id)
+            self.graph.check_create_node(id)
         except ConflictOccured:
             self.createNodeSelf(origin, id)
         except InvalidOperation:
             self.removeNodeSelf(origin, id)
         else:
-            node = self.node_factory(id)
-            self.add_node(node)
+            node = self.graph.node_factory(id)
+            self.graph.add_node(node)
             self.changePortsAll(None, id, node.get_ports())
-            #self.changeStateAll(None, id, node.set_state())
+            self.changeStateAll(None, id, node.set_state())
             self.createNodeAll(origin, id)
 
     def on_nodeRemoved(self, origin, id):
         try:
-            self.check_remove_node(id)
+            self.graph.check_remove_node(id)
         except ConflictOccured:
             self.removeNodeSelf(origin, id)
         except InvalidOperation:
             self.createNodeSelf(origin, id)
         else:
-            for link in self.find_links_startswith(id):
+            for link in self.graph.find_links_startswith(id):
                 self.remove_link(link)
                 self.removeLinkAll(None,
                     link.start_id, link.start_name, 
                     link.end_id, link.end_name)
 
-            for link in self.find_links_endswith(id):
+            for link in self.graph.find_links_endswith(id):
                 self.remove_link(link)
                 self.removeLinkAll(None,
                     link.start_id, link.start_name, 
                     link.end_id, link.end_name)
 
-            self.remove_node(id)
+            self.graph.remove_node(id)
             self.removeNodeAll(origin, id)
 
-    #def on_nodeStateChanged(self, origin, id, state): pass
+    def on_nodeStateChanged(self, origin, id, state):
+        try:
+            self.check_change_state(id, state)
+        except ConflictOccured:
+            pass
+        except InvalidOperation:
+            pass
+        else:
+            pass
 
     def on_linkAdded(self, origin, start_id, start_name, end_id, end_name):
         try:
-            self.check_add_link(start_id, start_name, end_id, end_name)
+            self.graph.check_add_link(start_id, start_name, end_id, end_name)
         except ConflictOccured:
             self.addLinkSelf(origin, start_id, start_name, end_id, end_name)
         except InvalidOperation:
             self.removeLinkSelf(origin, start_id, start_name, end_id, end_name)
         else:
-            link = self.link_factory(start_id, start_name, end_id, end_name)
-            self.add_link(link)
+            link = self.graph.link_factory(start_id, start_name, end_id, end_name)
+            self.graph.add_link(link)
             self.addLinkAll(origin, start_id, start_name, end_id, end_name)
 
     def on_linkRemoved(self, origin, start_id, start_name, end_id, end_name):
         try:
-            self.check_remove_link(start_id, start_name, end_id, end_name)
+            self.graph.check_remove_link(start_id, start_name, end_id, end_name)
         except ConflictOccured:
             self.removeLinkSelf(origin, start_id, start_name, end_id, end_name)
         except InvalidOperation:
             self.addLinkSelf(origin, start_id, start_name, end_id, end_name)
         else:
-            self.remove_link(start_id, start_name, end_id, end_name)
+            self.graph.remove_link(start_id, start_name, end_id, end_name)
             self.removeLinkAll(origin, start_id, start_name, end_id, end_name)
 
     # ======================================================================== #
 
-    def _increv(self):
-        old = self._rev
-        self._rev += 1
-        return old
-
     def _callSelf(self, name, origin, *args, **kwargs):
-        rev = self._increv()
+        rev = self.graph.rev
         origin.user.send(name, *args, rev=rev, origin=origin.rev, **kwargs)
 
     def _callAll(self, name, origin, *args, **kwargs):
-        rev = self._increv()
+        rev = self.graph.rev
         for user in self._users.values():
             if origin is not None and origin.user is user:
                 user.send(name, *args, rev=rev, origin=origin.rev, **kwargs)

@@ -51,6 +51,7 @@ class State(object):
 
 class Node(object):
     state_factory = State
+    port_factory = Port
 
     def __init__(self, id):
         self._id = id
@@ -71,7 +72,7 @@ class Node(object):
     def add_port(self, port, index=None):
         if index is None:
             index = len(self._ports)
-        self._ports.insert(port)
+        self._ports.insert(index, port)
         self._ports_by_name[port.name] = port
 
     def remove_port(self, name):
@@ -83,6 +84,9 @@ class Node(object):
 
     def get_state(self):
         return self._state.serialize()
+
+    def set_state(self, state):
+        return self._state.deserialize(state)        
 
 class Link(object):
     def __init__(self, start_id, start_name, end_id, end_name):
@@ -216,7 +220,8 @@ class Graph(object):
             raise NodeAlreadyRemovedConflict(id)
 
     def check_change_state(self, id, state):
-        pass
+        if not self.has_node(id): 
+            raise NodeAlreadyRemovedConflict(id)
 
     def check_add_link(self, start_id, start_name, end_id, end_name):
         if not self.has_node(start_id): 
@@ -303,11 +308,12 @@ class GraphModel(Users):
 
     def on_nodeStateChanged(self, origin, id, state):
         try:
-            self.check_change_state(id, state)
-        except InvalidOperation:
-            self.removeNodeSelf(origin, id)
+            self.graph.check_change_state(id, state)
+        except ConflictOccured:
+            self.changeStateSelf(origin, id, None)
         else:
             node = self.graph.get_node(id)
+            node.set_state(state)
             self.changeStateAll(origin, id, node.get_state())
 
     def on_linkAdded(self, origin, start_id, start_name, end_id, end_name):

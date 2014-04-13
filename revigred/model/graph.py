@@ -81,7 +81,7 @@ class Node(object):
     def get_ports(self):
         return [port.serialize() for port in self._ports]
 
-    def set_state(self):
+    def get_state(self):
         return self._state.serialize()
 
 class Link(object):
@@ -215,6 +215,9 @@ class Graph(object):
         if not self.has_node(id): 
             raise NodeAlreadyRemovedConflict(id)
 
+    def check_change_state(self, id, state):
+        pass
+
     def check_add_link(self, start_id, start_name, end_id, end_name):
         if not self.has_node(start_id): 
             raise NoSuchNodeError(start_id)
@@ -271,9 +274,9 @@ class GraphModel(Users):
         else:
             node = self.graph.node_factory(id)
             self.graph.add_node(node)
-            self.changePortsAll(None, id, node.get_ports())
-            self.changeStateAll(None, id, node.set_state())
             self.createNodeAll(origin, id)
+            self.changePortsAll(None, id, node.get_ports())
+            self.changeStateAll(None, id, node.get_state())
 
     def on_nodeRemoved(self, origin, id):
         try:
@@ -301,12 +304,11 @@ class GraphModel(Users):
     def on_nodeStateChanged(self, origin, id, state):
         try:
             self.check_change_state(id, state)
-        except ConflictOccured:
-            pass
         except InvalidOperation:
-            pass
+            self.removeNodeSelf(origin, id)
         else:
-            pass
+            node = self.graph.get_node(id)
+            self.changeStateAll(origin, id, node.get_state())
 
     def on_linkAdded(self, origin, start_id, start_name, end_id, end_name):
         try:
@@ -335,7 +337,11 @@ class GraphModel(Users):
 
     def _callSelf(self, name, origin, *args, **kwargs):
         rev = self.graph.rev
-        origin.user.send(name, *args, rev=rev, origin=origin.rev, **kwargs)
+        for user in self._users.values():
+            if origin is not None and origin.user is user:
+                user.send(name, *args, rev=rev, origin=origin.rev, **kwargs)
+            else:
+                user.send("nop", rev=rev)
 
     def _callAll(self, name, origin, *args, **kwargs):
         rev = self.graph.rev

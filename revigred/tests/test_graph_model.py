@@ -39,6 +39,16 @@ class FakeOrigin(object):
 class FakeModelGraph(GraphModel):
     user_factory = FakeUser
 
+class Counter(object):
+    def __init__(self):
+        self._value = 0
+
+    @property
+    def rev(self):
+        old = self._value
+        self._value += 1
+        return old
+
 class TestGraphModel(unittest.TestCase):
     def make_node_id(self):
         return "NODE-" + uuid.uuid4().hex
@@ -53,16 +63,19 @@ class TestGraphModel(unittest.TestCase):
         node_id = self.make_node_id()
         self.model.on_nodeCreated(self.user.make_origin(), node_id)
 
+        rev = Counter()
+        origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2, 'origin': 0}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
             ])
 
+        rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2}),
+            ('createNode', (node_id,), {'rev': rev.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
             ])
 
     def test_double_node_create_conflict(self):
@@ -70,17 +83,21 @@ class TestGraphModel(unittest.TestCase):
         self.model.on_nodeCreated(self.user.make_origin(), node_id)
         self.model.on_nodeCreated(self.user.make_origin(), node_id)
 
+        rev = Counter()
+        origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2, 'origin': 0}),
-            ('createNode', (node_id,), {'rev': 3, 'origin': 1}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
+        rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2}),
+            ('createNode', (node_id,), {'rev': rev.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
             ])
 
     def test_creating_single_node_remove_node(self):
@@ -88,29 +105,36 @@ class TestGraphModel(unittest.TestCase):
         self.model.on_nodeCreated(self.user.make_origin(), node_id)
         self.model.on_nodeRemoved(self.user.make_origin(), node_id)
 
+        rev = Counter()
+        origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2, 'origin': 0}),
-            ('removeNode', (node_id,), {'rev': 3, 'origin': 1}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
+        rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2}),
-            ('removeNode', (node_id,), {'rev': 3}),
+            ('createNode', (node_id,), {'rev': rev.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev}),
             ])
 
     def test_remove_not_existant_node(self):
         node_id = self.make_node_id()
         self.model.on_nodeRemoved(self.user.make_origin(), node_id)
 
+        rev = Counter()
+        origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('removeNode', (node_id,), {'rev': 0, 'origin': 0}),
+            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
+        rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
+            ('nop', (), {'rev': rev.rev}),
             ])
 
     def test_creating_single_node_double_remove_node_conflict(self):
@@ -119,19 +143,23 @@ class TestGraphModel(unittest.TestCase):
         self.model.on_nodeRemoved(self.user.make_origin(), node_id)
         self.model.on_nodeRemoved(self.user.make_origin(), node_id)
 
+        rev = Counter()
+        origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2, 'origin': 0}),
-            ('removeNode', (node_id,), {'rev': 3, 'origin': 1}),
-            ('removeNode', (node_id,), {'rev': 4, 'origin': 2}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
+        rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2}),
-            ('removeNode', (node_id,), {'rev': 3}),
+            ('createNode', (node_id,), {'rev': rev.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
             ])
 
     def test_creating_remove_create_single(self):
@@ -140,22 +168,25 @@ class TestGraphModel(unittest.TestCase):
         self.model.on_nodeRemoved(self.user.make_origin(), node_id)
         self.model.on_nodeCreated(self.user.make_origin(), node_id)
 
+        rev = Counter()
+        origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2, 'origin': 0}),
-            ('removeNode', (node_id,), {'rev': 3, 'origin': 1}),
-            ('changePorts', (node_id, []), {'rev': 4}),
-            ('changeState', (node_id, {}), {'rev': 5}),
-            ('createNode', (node_id,), {'rev': 6, 'origin': 2}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
             ])
 
+        rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('changePorts', (node_id, []), {'rev': 0}),
-            ('changeState', (node_id, {}), {'rev': 1}),
-            ('createNode', (node_id,), {'rev': 2}),
-            ('removeNode', (node_id,), {'rev': 3}),
-            ('changePorts', (node_id, []), {'rev': 4}),
-            ('changeState', (node_id, {}), {'rev': 5}),
-            ('createNode', (node_id,), {'rev': 6}),
+            ('createNode', (node_id,), {'rev': rev.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('removeNode', (node_id,), {'rev': rev.rev}),
+            ('createNode', (node_id,), {'rev': rev.rev}),
+            ('changePorts', (node_id, []), {'rev': rev.rev}),
+            ('changeState', (node_id, {}), {'rev': rev.rev}),
             ])

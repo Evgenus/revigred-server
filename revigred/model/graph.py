@@ -221,7 +221,7 @@ class Graph(object):
 
     def check_change_state(self, id, state):
         if not self.has_node(id): 
-            raise NodeAlreadyRemovedConflict(id)
+            raise NoSuchNodeError(id)
 
     def check_add_link(self, start_id, start_name, end_id, end_name):
         if not self.has_node(start_id): 
@@ -254,7 +254,6 @@ class Graph(object):
 
         if not self.has_link(start_id, start_name, end_id, end_name):
             raise LinkAlreadyRemovedConflict(start_id, start_name, end_id, end_name)
-
 
 # ____________________________________________________________________________ #
 
@@ -309,7 +308,7 @@ class GraphModel(Users):
     def on_nodeStateChanged(self, origin, id, state):
         try:
             self.graph.check_change_state(id, state)
-        except ConflictOccured:
+        except InvalidOperation:
             self.changeStateSelf(origin, id, None)
         else:
             node = self.graph.get_node(id)

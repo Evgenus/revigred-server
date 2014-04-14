@@ -24,6 +24,12 @@ class ChatUser(User):
         greeting = "{0} entered the chat".format(self.name)
         self.model.broadcast("notify", greeting, name=self.name)
 
+    def dispatch(self, name, *args, **kwargs):
+        func = getattr(self.client, "on_" + name, None)
+        if func is None:
+            raise ValueError("command {} was not found")
+        func(*args, **kwargs)
+
     def on_say(self, text):
         self.model.broadcast("say", text, name=self.name)
 

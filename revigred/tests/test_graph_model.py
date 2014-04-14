@@ -7,29 +7,6 @@ from revigred.model import (
     User,
     )
 
-class FakeUser(User):
-    def __init__(self, model):
-        super().__init__(model)
-        self._message_pool = []
-        self._rev = 0
-
-    def send(self, name, *args, **kwargs):
-        message = (name, args, kwargs)
-        print(*message)
-        self._message_pool.append(message)
-
-    @property
-    def messages(self):
-        return self._message_pool
-
-    def make_origin(self):
-        origin = FakeOrigin(self, self._rev)
-        self._rev += 1
-        return origin
-
-    def drop(self):
-        self._message_pool = []
-
 class FakeOrigin(object):
     def __init__(self, user, rev):
         self._user = user
@@ -42,6 +19,31 @@ class FakeOrigin(object):
     @property
     def rev(self):
         return self._rev
+
+class FakeUser(User):
+    def __init__(self, model):
+        super().__init__(model)
+        self._message_pool = []
+
+    def send(self, name, *args, **kwargs):
+        message = (name, args, kwargs)
+        print(*message)
+        self._message_pool.append(message)
+
+    @property
+    def messages(self):
+        return self._message_pool
+
+    def drop(self):
+        self._message_pool = []
+
+    def dispatch(self, name, *args, **kwargs):
+        rev = kwargs.pop("rev")
+        func = getattr(self.model, "on_" + name, None)
+        if func is None:
+            raise ValueError("command {} was not found")
+        origin = FakeOrigin(self, rev)
+        func(origin, *args, **kwargs)
 
 class FakeNode(Node):
     def __init__(self, id):
@@ -80,7 +82,8 @@ class TestNodes(unittest.TestCase):
 
     def test_create_single_node(self):
         self.id = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -99,8 +102,9 @@ class TestNodes(unittest.TestCase):
 
     def test_double_node_create_conflict(self):
         self.id = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -121,8 +125,9 @@ class TestNodes(unittest.TestCase):
 
     def test_create_single_node_remove_node(self):
         self.id = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
-        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
+        self.user.dispatch("nodeRemoved", self.id, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -143,7 +148,8 @@ class TestNodes(unittest.TestCase):
 
     def test_remove_not_existant_node(self):
         self.id = make_node_id()
-        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
+        test = Counter()
+        self.user.dispatch("nodeRemoved", self.id, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -158,9 +164,10 @@ class TestNodes(unittest.TestCase):
 
     def test_create_single_node_double_remove_node_conflict(self):
         self.id = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
-        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
-        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
+        self.user.dispatch("nodeRemoved", self.id, rev=test.rev)
+        self.user.dispatch("nodeRemoved", self.id, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -183,9 +190,10 @@ class TestNodes(unittest.TestCase):
 
     def test_create_remove_create_single(self):
         self.id = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
-        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
+        self.user.dispatch("nodeRemoved", self.id, rev=test.rev)
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -212,8 +220,9 @@ class TestNodes(unittest.TestCase):
 
     def test_create_node_change_state(self):
         self.id = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id)
-        self.model.on_nodeStateChanged(self.user.make_origin(), self.id, {"state": True})
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id, rev=test.rev)
+        self.user.dispatch("nodeStateChanged", self.id, {"state": True}, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -234,7 +243,8 @@ class TestNodes(unittest.TestCase):
 
     def test_change_state_no_node(self):
         self.id = make_node_id()
-        self.model.on_nodeStateChanged(self.user.make_origin(), self.id, {"state": True})
+        test = Counter()
+        self.user.dispatch("nodeStateChanged", self.id, {"state": True}, rev=test.rev)
 
         rev = Counter()
         origin = Counter()
@@ -256,13 +266,15 @@ class TestLinks(unittest.TestCase):
         self.id1 = make_node_id()
         self.id2 = make_node_id()
         self.id3 = make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), self.id1)
-        self.model.on_nodeCreated(self.user.make_origin(), self.id2)
+        test = Counter()
+        self.user.dispatch("nodeCreated", self.id1, rev=test.rev)
+        self.user.dispatch("nodeCreated", self.id2, rev=test.rev)
         self.user.drop()
         self.observer.drop()
 
     def test_create_link(self):
-        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkAdded", self.id1, "start", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -276,8 +288,9 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_double_create_link(self):
-        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
-        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkAdded", self.id1, "start", self.id2, "end", rev=test.rev)
+        self.user.dispatch("linkAdded", self.id1, "start", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -293,8 +306,9 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_create_remove_link(self):
-        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkAdded", self.id1, "start", self.id2, "end", rev=test.rev)
+        self.user.dispatch("linkRemoved", self.id1, "start", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -310,9 +324,10 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_create_double_remove_link(self):
-        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkAdded", self.id1, "start", self.id2, "end", rev=test.rev)
+        self.user.dispatch("linkRemoved", self.id1, "start", self.id2, "end", rev=test.rev)
+        self.user.dispatch("linkRemoved", self.id1, "start", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -330,7 +345,8 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_remove_inexist_link_1(self):
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkRemoved", self.id1, "start", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -344,7 +360,8 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_remove_inexist_link_2(self):
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end_")
+        test = Counter(2)
+        self.user.dispatch("linkRemoved", self.id1, "start", self.id2, "end_", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -358,7 +375,8 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_remove_inexist_link_3(self):
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start_", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkRemoved", self.id1, "start_", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -372,7 +390,8 @@ class TestLinks(unittest.TestCase):
             ])
 
     def test_remove_inexist_link_4(self):
-        self.model.on_linkRemoved(self.user.make_origin(), self.id3, "start", self.id2, "end")
+        test = Counter(2)
+        self.user.dispatch("linkRemoved", self.id3, "start", self.id2, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)
@@ -385,8 +404,9 @@ class TestLinks(unittest.TestCase):
             ('nop', (), {'rev': rev.rev}),
             ])
 
-    def test_remove_inexist_link_1(self):
-        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id3, "end")
+    def test_remove_inexist_link_5(self):
+        test = Counter(2)
+        self.user.dispatch("linkRemoved", self.id1, "start", self.id3, "end", rev=test.rev)
 
         rev = Counter(6)
         origin = Counter(2)

@@ -27,6 +27,9 @@ class FakeUser(User):
         self._rev += 1
         return origin
 
+    def drop(self):
+        self._message_pool = []
+
 class FakeOrigin(object):
     def __init__(self, user, rev):
         self._user = user
@@ -54,8 +57,8 @@ class FakeModelGraph(GraphModel):
     graph_factory = FakeGraph
 
 class Counter(object):
-    def __init__(self):
-        self._value = 0
+    def __init__(self, start=0):
+        self._value = start
 
     @property
     def rev(self):
@@ -63,13 +66,12 @@ class Counter(object):
         self._value += 1
         return old
 
+PORTS = [{'name': 'start', 'title': ''}, {'name': 'end', 'title': ''}]
 
-class TestGraphModel(unittest.TestCase):
-    PORTS = [{'name': 'start', 'title': ''}, {'name': 'end', 'title': ''}]
+def make_node_id():
+    return "NODE-" + uuid.uuid4().hex
 
-    def make_node_id(self):
-        return "NODE-" + uuid.uuid4().hex
-
+class TestNodes(unittest.TestCase):
     def setUp(self):
         self.model = FakeModelGraph()
         self.graph = self.model.graph
@@ -77,76 +79,76 @@ class TestGraphModel(unittest.TestCase):
         self.observer = self.model.create_new_user()
 
     def test_create_single_node(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
+        self.id = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
             ])
 
     def test_double_node_create_conflict(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
+        self.id = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
             ('nop', (), {'rev': rev.rev}),
             ])
 
     def test_create_single_node_remove_node(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
-        self.model.on_nodeRemoved(self.user.make_origin(), node_id)
+        self.id = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev}),
             ])
 
     def test_remove_not_existant_node(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeRemoved(self.user.make_origin(), node_id)
+        self.id = make_node_id()
+        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
@@ -155,144 +157,244 @@ class TestGraphModel(unittest.TestCase):
             ])
 
     def test_create_single_node_double_remove_node_conflict(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
-        self.model.on_nodeRemoved(self.user.make_origin(), node_id)
-        self.model.on_nodeRemoved(self.user.make_origin(), node_id)
+        self.id = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
+        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev}),
             ('nop', (), {'rev': rev.rev}),
             ])
 
     def test_create_remove_create_single(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
-        self.model.on_nodeRemoved(self.user.make_origin(), node_id)
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
+        self.id = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        self.model.on_nodeRemoved(self.user.make_origin(), self.id)
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('removeNode', (node_id,), {'rev': rev.rev}),
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('removeNode', (self.id,), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
             ])
 
     def test_create_node_change_state(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id)
-        self.model.on_nodeStateChanged(self.user.make_origin(), node_id, {"state": True})
+        self.id = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id)
+        self.model.on_nodeStateChanged(self.user.make_origin(), self.id, {"state": True})
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('changeState', (node_id, {"state":True}), {'rev': rev.rev, 'origin': origin.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('changeState', (self.id, {"state":True}), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id,), {'rev': rev.rev}),
-            ('changePorts', (node_id, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id, {}), {'rev': rev.rev}),
-            ('changeState', (node_id, {"state":True}), {'rev': rev.rev}),
+            ('createNode', (self.id,), {'rev': rev.rev}),
+            ('changePorts', (self.id, PORTS), {'rev': rev.rev}),
+            ('changeState', (self.id, {}), {'rev': rev.rev}),
+            ('changeState', (self.id, {"state":True}), {'rev': rev.rev}),
             ])
 
     def test_change_state_no_node(self):
-        node_id = self.make_node_id()
-        self.model.on_nodeStateChanged(self.user.make_origin(), node_id, {"state": True})
+        self.id = make_node_id()
+        self.model.on_nodeStateChanged(self.user.make_origin(), self.id, {"state": True})
 
         rev = Counter()
         origin = Counter()
         self.assertSequenceEqual(self.user.messages, [
-            ('changeState', (node_id, None), {'rev': rev.rev, 'origin': origin.rev}),
+            ('changeState', (self.id, None), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
         self.assertSequenceEqual(self.observer.messages, [
             ('nop', (), {'rev': rev.rev}),
             ])
+
+class TestLinks(unittest.TestCase):
+    def setUp(self):
+        self.model = FakeModelGraph()
+        self.graph = self.model.graph
+        self.user = self.model.create_new_user()
+        self.observer = self.model.create_new_user()
+        self.id1 = make_node_id()
+        self.id2 = make_node_id()
+        self.id3 = make_node_id()
+        self.model.on_nodeCreated(self.user.make_origin(), self.id1)
+        self.model.on_nodeCreated(self.user.make_origin(), self.id2)
+        self.user.drop()
+        self.observer.drop()
 
     def test_create_link(self):
-        node_id1 = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id1)
-        node_id2 = self.make_node_id()
-        node_id3 = self.make_node_id()
-        self.model.on_nodeCreated(self.user.make_origin(), node_id2)
-        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id2, "end")
-        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id2, "end")
-        self.model.on_linkRemoved(self.user.make_origin(), node_id1, "start", node_id2, "end")
-        self.model.on_linkRemoved(self.user.make_origin(), node_id1, "start", node_id2, "end")
-        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id2, "end_")
-        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start_", node_id2, "end")
-        self.model.on_linkAdded(self.user.make_origin(), node_id3, "start", node_id2, "end")
-        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id3, "end")
+        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
 
-        rev = Counter()
-        origin = Counter()
+        rev = Counter(6)
+        origin = Counter(2)
         self.assertSequenceEqual(self.user.messages, [
-            ('createNode', (node_id1,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id1, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id1, {}), {'rev': rev.rev}),
-            ('createNode', (node_id2,), {'rev': rev.rev, 'origin': origin.rev}),
-            ('changePorts', (node_id2, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id2, {}), {'rev': rev.rev}),
-            ('addLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('addLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeLink', (node_id1, "start", node_id2, "end_"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeLink', (node_id1, "start_", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeLink', (node_id3, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
-            ('removeLink', (node_id1, "start", node_id3, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
-        rev = Counter()
+        rev = Counter(6)
         self.assertSequenceEqual(self.observer.messages, [
-            ('createNode', (node_id1,), {'rev': rev.rev}),
-            ('changePorts', (node_id1, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id1, {}), {'rev': rev.rev}),
-            ('createNode', (node_id2,), {'rev': rev.rev}),
-            ('changePorts', (node_id2, self.PORTS), {'rev': rev.rev}),
-            ('changeState', (node_id2, {}), {'rev': rev.rev}),
-            ('addLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev}),
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev}),
+            ])
+
+    def test_double_create_link(self):
+        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev}),
             ('nop', (), {'rev': rev.rev}),
-            ('removeLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev}),
+            ])
+
+    def test_create_remove_link(self):
+        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev}),
+            ('removeLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev}),
+            ])
+
+    def test_create_double_remove_link(self):
+        self.model.on_linkAdded(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
+            ('addLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev}),
+            ('removeLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev}),
             ('nop', (), {'rev': rev.rev}),
+            ])
+
+    def test_remove_inexist_link_1(self):
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('removeLink', (self.id1, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
             ('nop', (), {'rev': rev.rev}),
+            ])
+
+    def test_remove_inexist_link_2(self):
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id2, "end_")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('removeLink', (self.id1, "start", self.id2, "end_"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
             ('nop', (), {'rev': rev.rev}),
+            ])
+
+    def test_remove_inexist_link_3(self):
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start_", self.id2, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('removeLink', (self.id1, "start_", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
             ('nop', (), {'rev': rev.rev}),
+            ])
+
+    def test_remove_inexist_link_4(self):
+        self.model.on_linkRemoved(self.user.make_origin(), self.id3, "start", self.id2, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('removeLink', (self.id3, "start", self.id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
+            ('nop', (), {'rev': rev.rev}),
+            ])
+
+    def test_remove_inexist_link_1(self):
+        self.model.on_linkRemoved(self.user.make_origin(), self.id1, "start", self.id3, "end")
+
+        rev = Counter(6)
+        origin = Counter(2)
+        self.assertSequenceEqual(self.user.messages, [
+            ('removeLink', (self.id1, "start", self.id3, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ])
+
+        rev = Counter(6)
+        self.assertSequenceEqual(self.observer.messages, [
             ('nop', (), {'rev': rev.rev}),
             ])

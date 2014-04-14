@@ -249,9 +249,16 @@ class TestGraphModel(unittest.TestCase):
         node_id1 = self.make_node_id()
         self.model.on_nodeCreated(self.user.make_origin(), node_id1)
         node_id2 = self.make_node_id()
+        node_id3 = self.make_node_id()
         self.model.on_nodeCreated(self.user.make_origin(), node_id2)
         self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id2, "end")
         self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id2, "end")
+        self.model.on_linkRemoved(self.user.make_origin(), node_id1, "start", node_id2, "end")
+        self.model.on_linkRemoved(self.user.make_origin(), node_id1, "start", node_id2, "end")
+        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id2, "end_")
+        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start_", node_id2, "end")
+        self.model.on_linkAdded(self.user.make_origin(), node_id3, "start", node_id2, "end")
+        self.model.on_linkAdded(self.user.make_origin(), node_id1, "start", node_id3, "end")
 
         rev = Counter()
         origin = Counter()
@@ -264,6 +271,12 @@ class TestGraphModel(unittest.TestCase):
             ('changeState', (node_id2, {}), {'rev': rev.rev}),
             ('addLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
             ('addLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (node_id1, "start", node_id2, "end_"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (node_id1, "start_", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (node_id3, "start", node_id2, "end"), {'rev': rev.rev, 'origin': origin.rev}),
+            ('removeLink', (node_id1, "start", node_id3, "end"), {'rev': rev.rev, 'origin': origin.rev}),
             ])
 
         rev = Counter()
@@ -275,5 +288,11 @@ class TestGraphModel(unittest.TestCase):
             ('changePorts', (node_id2, self.PORTS), {'rev': rev.rev}),
             ('changeState', (node_id2, {}), {'rev': rev.rev}),
             ('addLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
+            ('removeLink', (node_id1, "start", node_id2, "end"), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
+            ('nop', (), {'rev': rev.rev}),
             ('nop', (), {'rev': rev.rev}),
             ])

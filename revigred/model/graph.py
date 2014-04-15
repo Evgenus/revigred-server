@@ -8,16 +8,14 @@ __all__ = [
     "Link",
     "Graph",
     "GraphModel",
-    "ResultException",
-    "ConflictOccured",
-    "InvalidOperation",
-    "NodeAlreadyExistsConflict",
-    "PortAlreadyRemovedConflict",
-    "NodeAlreadyRemovedConflict",
-    "LinkAlreadyExistsConflict",
-    "LinkAlreadyRemovedConflict",
-    "NoSuchNodeError",
-    "NoSuchPortError",
+    "NodeExists",
+    "NoSuchNode",
+    "NoSuchPort",
+    "LinkExists",
+    "NoSuchLink",
+    "Merge",
+    "Cancel",
+    "Confirm",
     ]
 
 class Port(object):
@@ -114,44 +112,33 @@ class Link(object):
 # ____________________________________________________________________________ #
 
 class ResultException(Exception): pass
-class ConflictOccured(ResultException): pass
-class InvalidOperation(ResultException): pass
-
-class NodeAlreadyExistsConflict(ConflictOccured):
+class NodeExists(ResultException):
     def __init__(self, id):
         self.id = id
-
-class PortAlreadyRemovedConflict(ConflictOccured):
+class NoSuchNode(ResultException):
+    def __init__(self, id):
+        self.id = id
+class NoSuchPort(ResultException):
     def __init__(self, id, name):
         self.id = id
         self.name = name
-
-class NodeAlreadyRemovedConflict(ConflictOccured):
-    def __init__(self, id):
-        self.id = id
-
-class LinkAlreadyExistsConflict(ConflictOccured):
+class LinkExists(ResultException):
+    def __init__(self, start_id, start_name, end_id, end_name):
+        self.start_id = start_id
+        self.start_name = start_name
+        self.end_id = end_id
+        self.end_name = end_name
+class NoSuchLink(ResultException):
     def __init__(self, start_id, start_name, end_id, end_name):
         self.start_id = start_id
         self.start_name = start_name
         self.end_id = end_id
         self.end_name = end_name
 
-class LinkAlreadyRemovedConflict(ConflictOccured):
-    def __init__(self, start_id, start_name, end_id, end_name):
-        self.start_id = start_id
-        self.start_name = start_name
-        self.end_id = end_id
-        self.end_name = end_name
-
-class NoSuchNodeError(InvalidOperation):
-    def __init__(self, id):
-        self.id = id
-
-class NoSuchPortError(InvalidOperation):
-    def __init__(self, id, name):
-        self.id = id
-        self.name = name
+class ResultResolution(Exception): pass
+class Merge(ResultResolution): pass
+class Cancel(ResultException): pass
+class Confirm(ResultException): pass
 
 class Graph(object):
     node_factory = Node
@@ -213,47 +200,47 @@ class Graph(object):
 
     def check_create_node(self, id):
         if self.has_node(id): 
-            raise NodeAlreadyExistsConflict(id)
+            raise Confirm() from NodeExists(id)
 
     def check_remove_node(self, id):
         if not self.has_node(id): 
-            raise NodeAlreadyRemovedConflict(id)
+            raise Confirm() from NoSuchNode(id)
 
     def check_change_state(self, id, state):
         if not self.has_node(id): 
-            raise NoSuchNodeError(id)
+            raise Cancel() from NoSuchNode(id)
 
     def check_add_link(self, start_id, start_name, end_id, end_name):
         if not self.has_node(start_id): 
-            raise NoSuchNodeError(start_id)
+            raise Cancel() from NoSuchNode(start_id)
 
         if not self.has_node(end_id): 
-            raise NoSuchNodeError(end_id)
+            raise Cancel() from NoSuchNode(end_id)
 
         if not self.get_node(start_id).has_port(start_name): 
-            raise NoSuchPortError(start_id, start_name)
+            raise Cancel() from NoSuchPort(start_id, start_name)
 
         if not self.get_node(end_id).has_port(end_name): 
-            raise NoSuchPortError(end_id, end_name)
+            raise Cancel() from NoSuchPort(end_id, end_name)
 
         if self.has_link(start_id, start_name, end_id, end_name):
-            raise LinkAlreadyExistsConflict(start_id, start_name, end_id, end_name)
+            raise Confirm() from LinkExists(start_id, start_name, end_id, end_name)
 
     def check_remove_link(self, start_id, start_name, end_id, end_name):
         if not self.has_node(start_id): 
-            raise NodeAlreadyRemovedConflict(start_id)
+            raise Confirm() from NoSuchNode(start_id)
 
         if not self.has_node(end_id): 
-            raise NodeAlreadyRemovedConflict(end_id)
+            raise Confirm() from NoSuchNode(end_id)
 
         if not self.get_node(start_id).has_port(start_name): 
-            raise PortAlreadyRemovedConflict(start_id, start_name)
+            raise Confirm() from NoSuchPort(start_id, start_name)
 
         if not self.get_node(end_id).has_port(end_name): 
-            raise PortAlreadyRemovedConflict(end_id, end_name)
+            raise Confirm() from NoSuchPort(end_id, end_name)
 
         if not self.has_link(start_id, start_name, end_id, end_name):
-            raise LinkAlreadyRemovedConflict(start_id, start_name, end_id, end_name)
+            raise Confirm() from NoSuchLink(start_id, start_name, end_id, end_name)
 
 # ____________________________________________________________________________ #
 
@@ -271,9 +258,9 @@ class GraphModel(Users):
     def on_nodeCreated(self, origin, id):
         try:
             self.graph.check_create_node(id)
-        except ConflictOccured:
+        except Confirm:
             self.createNodeSelf(origin, id)
-        except InvalidOperation:
+        except Cancel:
             self.removeNodeSelf(origin, id)
         else:
             node = self.graph.node_factory(id)
@@ -285,9 +272,9 @@ class GraphModel(Users):
     def on_nodeRemoved(self, origin, id):
         try:
             self.graph.check_remove_node(id)
-        except ConflictOccured:
+        except Confirm:
             self.removeNodeSelf(origin, id)
-        except InvalidOperation:
+        except Cancel:
             self.createNodeSelf(origin, id)
         else:
             for link in self.graph.find_links_startswith(id):
@@ -308,7 +295,7 @@ class GraphModel(Users):
     def on_nodeStateChanged(self, origin, id, state):
         try:
             self.graph.check_change_state(id, state)
-        except InvalidOperation:
+        except Cancel:
             self.changeStateSelf(origin, id, None)
         else:
             node = self.graph.get_node(id)
@@ -318,9 +305,9 @@ class GraphModel(Users):
     def on_linkAdded(self, origin, start_id, start_name, end_id, end_name):
         try:
             self.graph.check_add_link(start_id, start_name, end_id, end_name)
-        except ConflictOccured:
+        except Confirm:
             self.addLinkSelf(origin, start_id, start_name, end_id, end_name)
-        except InvalidOperation:
+        except Cancel:
             self.removeLinkSelf(origin, start_id, start_name, end_id, end_name)
         else:
             link = self.graph.link_factory(start_id, start_name, end_id, end_name)
@@ -330,9 +317,9 @@ class GraphModel(Users):
     def on_linkRemoved(self, origin, start_id, start_name, end_id, end_name):
         try:
             self.graph.check_remove_link(start_id, start_name, end_id, end_name)
-        except ConflictOccured:
+        except Confirm:
             self.removeLinkSelf(origin, start_id, start_name, end_id, end_name)
-        except InvalidOperation:
+        except Cancel:
             self.addLinkSelf(origin, start_id, start_name, end_id, end_name)
         else:
             self.graph.remove_link(start_id, start_name, end_id, end_name)

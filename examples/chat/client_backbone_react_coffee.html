@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+    <head>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/coffee-script/1.7.1/coffee-script.min.js" type="text/javascript"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1-beta1/jquery.js" type="text/javascript"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/lodash.js/2.4.1/lodash.compat.js" type="text/javascript"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/underscore.string/2.3.3/underscore.string.min.js" type="text/javascript"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.1.2/backbone.js" type="text/javascript"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/json5/0.3.0/json5.min.js" type="text/javascript"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/react/0.10.0/react.js" type="text/javascript"></script>
+
+<script type="text/coffeescript">
+
+class Message extends Backbone.Model
+    defaults: ->
+        text: null
+
+class UserPhrase extends Message
+    defaults: ->
+        _.extend super(),
+            username: null
+            userid: null
+
+class SystemAlert extends Message
+
+class Messages extends Backbone.Collection
+    model: Message
+
+class Chat extends Backbone.Model
+    defaults: ->
+        messages: new Messages()
+        username: "Anonymous"
+        userid: null
+
+    constructor: (options) ->
+        super(options)
+        @on("open", @on_open, this)
+        @on("reconnect", @on_reconnect, this)
+        @on("close", @on_close, this)
+
+        @on("notify", @_alert, this)
+        @on("auth", @on_auth, this)
+        @on("say", @on_say, this)
+
+    _alert: (text) ->
+        message = new SystemAlert
+            text: text
+        @get("messages").add(message)
+        console.log(text)
+
+    post: (text) ->
+        @trigger("send", "say", [text], {})
+
+    on_open: ->
+        @_alert("Connected!")
+
+    on_close: ->
+        @_alert("Disconnected!")
+
+    on_reconnect: ->
+        @_alert("Trying to reconnect...")
+
+    on_auth: (options) ->
+        @set
+            userid: options.id
+            username: options.name
+
+    on_say: (text, options) ->
+        message = new UserPhrase
+            userid: options.id
+            username: options.name
+            text: text
+        @get("messages").add(message)
+        console.log(options.name, text)
+
+class Client extends Backbone.Model
+    constructor: (options) ->
+        @url = options.url
+        @model = options.model
+        @init_socket()
+        @model.on("send", @sendMessage, this)
+
+    init_socket: ->
+        @socket = new WebSocket(@url)
+        @socket.binaryType = "arraybuffer"
+        @socket.onopen = _.bind(@on_open, this)
+        @socket.onmessage = _.bind(@on_message, this)
+        @socket.onclose = _.bind(@on_close, this)
+
+    on_open: ->
+        @is_open = true
+        @model.trigger("open")
+
+    on_message: (event) ->
+        if typeof event.data is "string"
+            console.log(event.data)
+            [name, args, kwargs] = JSON5.parse(event.data);
+            @model.trigger(name, args..., kwargs)
+
+    on_close: ->
+        delete @socket
+        @model.trigger("close")
+        @is_open = false
+        #setTimeout(_.bind(@_reinit, this), 1000)
+
+    _reinit: ->
+        @model.trigger("reconnect")
+        @init_socket()
+
+    sendMessage: (name, args, kwargs) -> 
+        @socket.send(JSON5.stringify([name, args, kwargs]))
+
+
+UserPhraseView = React.createClass
+    displayName: "UserPhrase"
+
+    componentWillMount: ->
+        @props.model.on("change", @forceUpdate, this);
+
+    componentWillUnmount: ->
+        @props.model.off(this)
+
+    render: ->
+        React.DOM.p 
+            className: "message user-phrase"
+            React.DOM.span
+                className: "username"
+                @props.model.get("username")
+            React.DOM.span
+                className: "text"
+                @props.model.get("text")
+
+SystemAlertView = React.createClass
+    displayName: "SystemAlert"
+
+    componentWillMount: ->
+        @props.model.on("change", (=> @forceUpdate()), this);
+
+    componentWillUnmount: ->
+        @props.model.off(this)
+
+    render: ->
+        React.DOM.p
+            className: "message system-alert"
+            React.DOM.span
+                className: "text"
+                @props.model.get("text")
+
+MessagesView = React.createClass
+    displayName: "Messages"
+
+    componentWillMount: ->
+        @props.model.on("change add remove", (=> @forceUpdate()), this);
+
+    componentWillUnmount: ->
+        @props.model.off(this)
+
+    render_message: (message, index) -> 
+        if message instanceof UserPhrase
+            return new UserPhraseView
+                key: index
+                model: message
+        if message instanceof SystemAlert
+            return new SystemAlertView
+                key: index
+                model: message
+
+    render: ->
+        React.DOM.div 
+            id: "messages"
+            @props.model.map(@render_message)
+
+ChatView  = React.createClass
+    displayName: "Chat"
+
+    componentWillMount: ->
+        @props.model.on("change", (=> @forceUpdate()), this);
+
+    componentWillUnmount: ->
+        @props.model.off(null, null, this)
+
+    submit: (event) ->
+        form = event.target
+        message = form.elements["message"]
+        value = message.value
+        message.value = ""
+        @props.model.post(value)
+        return false
+
+    render: ->
+        messages = new MessagesView
+            model: @props.model.get("messages")
+
+        React.DOM.div null,
+            React.DOM.h1 null,
+                @props.model.get("username")
+            messages
+            React.DOM.form
+                onSubmit: @submit
+                React.DOM.input
+                    name: "message"
+                    type: "text"
+                React.DOM.input
+                    type: "submit"
+
+$ ->
+    chat = new Chat()
+    client = new Client
+        url: "ws://127.0.0.1:9000"
+        model: chat
+    view = new ChatView
+        model: chat
+
+    React.renderComponent(view, $("body")[0])
+</script>
+
+        <style>
+            #messages {
+                width: 500px;
+                height: 500px;
+                border: 1px solid black;
+                overflow: scroll;
+            }
+
+            input[name=message] {
+                width: 400px;
+            }
+
+            .message {
+                margin: 0;
+            }
+
+            .system-alert .text{
+                font-style: italic;
+            }
+            .user-phrase .username{
+                font-weight: bold;
+                margin-right: 3px;
+            }
+
+        </style>
+
+    </head>
+    <body>
+    </body>
+</html>

@@ -31,7 +31,7 @@ class ChatUser(User):
         func(*args, **kwargs)
 
     def on_say(self, text):
-        self.model.broadcast("say", text, name=self.name)
+        self.model.broadcast("say", text, name=self.name, id=self.id)
 
 class Chat(Users):
     @staticmethod

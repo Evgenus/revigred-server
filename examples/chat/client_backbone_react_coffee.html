@@ -8,6 +8,7 @@
 <script src="http://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.1.2/backbone.js" type="text/javascript"></script>
 <script src="http://cdnjs.cloudflare.com/ajax/libs/json5/0.3.0/json5.min.js" type="text/javascript"></script>
 <script src="http://cdnjs.cloudflare.com/ajax/libs/react/0.10.0/react.js" type="text/javascript"></script>
+<script src="http://rawgit.com/usepropeller/react.backbone/master/react.backbone.js" type="text/javascript"></script>
 
 <script type="text/coffeescript">
 
@@ -20,6 +21,7 @@ class UserPhrase extends Message
         _.extend super(),
             username: null
             userid: null
+            own: null
 
 class SystemAlert extends Message
 
@@ -70,6 +72,7 @@ class Chat extends Backbone.Model
             userid: options.id
             username: options.name
             text: text
+            own: options.id == @get("userid")
         @get("messages").add(message)
         console.log(options.name, text)
 
@@ -101,7 +104,7 @@ class Client extends Backbone.Model
         delete @socket
         @model.trigger("close")
         @is_open = false
-        #setTimeout(_.bind(@_reinit, this), 1000)
+        setTimeout(_.bind(@_reinit, this), 1000)
 
     _reinit: ->
         @model.trigger("reconnect")
@@ -111,33 +114,26 @@ class Client extends Backbone.Model
         @socket.send(JSON5.stringify([name, args, kwargs]))
 
 
-UserPhraseView = React.createClass
+UserPhraseView = React.createBackboneClass
     displayName: "UserPhrase"
-
-    componentWillMount: ->
-        @props.model.on("change", @forceUpdate, this);
-
-    componentWillUnmount: ->
-        @props.model.off(this)
 
     render: ->
         React.DOM.p 
             className: "message user-phrase"
-            React.DOM.span
-                className: "username"
-                @props.model.get("username")
+            if @props.model.get("own")
+                React.DOM.span
+                    className: "username"
+                    "You"
+            else                
+                React.DOM.span
+                    className: "username"
+                    @props.model.get("username")
             React.DOM.span
                 className: "text"
                 @props.model.get("text")
 
-SystemAlertView = React.createClass
+SystemAlertView = React.createBackboneClass
     displayName: "SystemAlert"
-
-    componentWillMount: ->
-        @props.model.on("change", (=> @forceUpdate()), this);
-
-    componentWillUnmount: ->
-        @props.model.off(this)
 
     render: ->
         React.DOM.p
@@ -146,20 +142,15 @@ SystemAlertView = React.createClass
                 className: "text"
                 @props.model.get("text")
 
-MessagesView = React.createClass
+MessagesView = React.createBackboneClass
     displayName: "Messages"
-
-    componentWillMount: ->
-        @props.model.on("change add remove", (=> @forceUpdate()), this);
-
-    componentWillUnmount: ->
-        @props.model.off(this)
 
     render_message: (message, index) -> 
         if message instanceof UserPhrase
             return new UserPhraseView
                 key: index
                 model: message
+
         if message instanceof SystemAlert
             return new SystemAlertView
                 key: index
@@ -170,14 +161,8 @@ MessagesView = React.createClass
             id: "messages"
             @props.model.map(@render_message)
 
-ChatView  = React.createClass
+ChatView  = React.createBackboneClass
     displayName: "Chat"
-
-    componentWillMount: ->
-        @props.model.on("change", (=> @forceUpdate()), this);
-
-    componentWillUnmount: ->
-        @props.model.off(null, null, this)
 
     submit: (event) ->
         form = event.target

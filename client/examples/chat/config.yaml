@@ -136,7 +136,7 @@ SURNAMES:
 
 --- !TypesTable
 Chat:
-  type: !resolve revigred.model.Chat
+  type: !resolve revigred.model.chat.Chat
   load: !resolve metaconfig.construct_from_mapping
 ...
 

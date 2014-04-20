@@ -14,7 +14,6 @@ from metaconfig import Config
 
 from revigred.reloader import run_with_reloader
 from revigred.protocol import ServerFactory
-from revigred.model import Chat
 from revigred.utils import title
 
 def parse_args():

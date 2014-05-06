@@ -380,3 +380,99 @@ class GraphModel(Users):
     
     def removeLinkAll(self, origin, start_id, start_name, end_id, end_name):
         self._callAll("removeLink", origin, start_id, start_name, end_id, end_name)
+
+# ____________________________________________________________________________ #
+
+NODE_STATUS_UNKNOWN = Sentinel('NODE_STATUS_UNKNOWN')
+NODE_STATUS_CREATED = Sentinel('NODE_STATUS_CREATED')
+NODE_STATUS_REMOVED = Sentinel('NODE_STATUS_REMOVED')
+
+class ClientNodeStatus(object):
+    def __init__(self, status, rev):
+        self._status = status
+        self._rev = rev
+
+    @property
+    def status(self):
+        return self._status
+
+    @status.setter
+    def status(self, value):
+        self._status = value
+
+    @property
+    def rev(self):
+        return self._rev
+
+    @rev.setter
+    def rev(self, value):
+        self._rev = value
+
+class ClientNode(object):
+    def __init__(self, id):
+        self._id = id
+        self._mine = ClientNodeStatus(NODE_STATUS_UNKNOWN, None)
+        self._their = ClientNodeStatus(NODE_STATUS_UNKNOWN, None)
+
+    def create(self, rev, origin): pass
+    
+    def create_mine(self, rev, origin): pass
+    
+    def create_their(self, rev): pass
+
+    def remove(self, rev, origin): pass
+ 
+    def remove_mine(self, rev, origin): pass
+    
+    def remove_their(self, rev): pass
+
+class ClientGraph(object):
+    def __init__(self):
+        self._nodes_by_id = {}
+
+    def _get_node(self, id):
+        node = self._nodes_by_id.get(id, None)
+        if node is None:
+            node = ClientNode(id)
+            self._nodes_by_id[id] = node
+        return node
+
+    def create_node(self, id, rev, origin):
+        node = self._get_node(id)
+        if origin is not None:
+            node.create_mine(rev, origin)
+        else:
+            node.create_their(rev)
+
+    def remove_node(self, id):
+        node = self._get_node(id)
+        if origin is not None:
+            node.remove_mine(rev, origin)
+        else:
+            node.remove_their(rev)
+
+class ClientGraphModel(object):
+    def __init__(self):
+        self.srev = 0
+        self.orev = 0
+
+    def _check_rev(self, rev):
+        assert rev is not None
+        assert rev != self.srev + 1
+        self.srev = rev
+
+    def on_nop(self, rev=None):
+        self._check_rev(rev)
+
+    def on_createNode(self, id, rev=None, origin=None):
+        self._check_rev(rev)
+        self.graph.create_node(id, rev, origin)
+
+    def on_removeNode(self, id, rev=None, origin=None):
+        self._check_rev(rev)
+        self.graph.remove_node(id, rev, origin)
+
+    def on_changeState(self): pass
+    def on_changePorts(self): pass
+    def on_addLink(self): pass
+    def on_removeLink(self): pass

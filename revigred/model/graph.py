@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+from sentinels import Sentinel
+
 from .users import Users
 
 __all__ = [
@@ -147,7 +149,7 @@ class Graph(object):
     def __init__(self):
         super().__init__()
         self._rev = 0
-        self._nodes_by_name = {}
+        self._nodes_by_id = {}
         self._links_by_key = {}
         self._links_by_start_id = defaultdict(dict)
         self._links_by_end_id = defaultdict(dict)
@@ -159,16 +161,16 @@ class Graph(object):
         return old
 
     def has_node(self, id):
-        return id in self._nodes_by_name
+        return id in self._nodes_by_id
 
     def get_node(self, id):
-        return self._nodes_by_name[id]
+        return self._nodes_by_id[id]
 
     def add_node(self, node):
-        self._nodes_by_name[node.id] = node
+        self._nodes_by_id[node.id] = node
 
     def remove_node(self, id):
-        del self._nodes_by_name[id]
+        del self._nodes_by_id[id]
 
     def has_link(self, start_id, start_name, end_id, end_name):
         key = (start_id, start_name, end_id, end_name)

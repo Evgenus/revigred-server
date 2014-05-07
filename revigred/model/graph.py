@@ -1,7 +1,5 @@
 from collections import defaultdict
 
-from sentinels import Sentinel
-
 from .users import Users
 
 __all__ = [
@@ -383,96 +381,129 @@ class GraphModel(Users):
 
 # ____________________________________________________________________________ #
 
-NODE_STATUS_UNKNOWN = Sentinel('NODE_STATUS_UNKNOWN')
-NODE_STATUS_CREATED = Sentinel('NODE_STATUS_CREATED')
-NODE_STATUS_REMOVED = Sentinel('NODE_STATUS_REMOVED')
+from functools import partial
+from enum import Enum
+from sentinels import NOTHING
 
-class ClientNodeStatus(object):
-    def __init__(self, status, rev):
-        self._status = status
-        self._rev = rev
+class NodeExistence(Enum):
+    CREATED = True
+    REMOVED = False
 
-    @property
-    def status(self):
-        return self._status
-
-    @status.setter
-    def status(self, value):
-        self._status = value
+class Cell(object):
+    def __init__(self):
+        self._value = NOTHING
 
     @property
-    def rev(self):
-        return self._rev
+    def empty(self):
+        return self._value is NOTHING
 
-    @rev.setter
-    def rev(self, value):
-        self._rev = value
+    def set(self, value):
+        self._value = value
 
-class ClientNode(object):
-    def __init__(self, id):
-        self._id = id
-        self._mine = ClientNodeStatus(NODE_STATUS_UNKNOWN, None)
-        self._their = ClientNodeStatus(NODE_STATUS_UNKNOWN, None)
+    def get(self):
+        return self._value
 
-    def create(self, rev, origin): pass
-    
-    def create_mine(self, rev, origin): pass
-    
-    def create_their(self, rev): pass
+class Branch(object):
+    cell_factory = Cell
+    def __init__(self):
+        self._cells = defaultdict(self.cell_factory)
 
-    def remove(self, rev, origin): pass
- 
-    def remove_mine(self, rev, origin): pass
-    
-    def remove_their(self, rev): pass
+    def add(self, rev, value):
+        assert self._cells[rev].empty
+        self._cells[rev].set(value)
+
+    def get(self, rev):
+        assert not self._cells[rev].empty
+        return self._cells[rev].get()
+
+    def top(self):
+        return max(self._cells)
+
+class Repo(object):
+    branch_factory = Branch
+    def __init__(self):
+        self._their = self.branch_factory()
+        self._conflict = self.branch_factory()
+        self._unresolved = None
+
+    def resolve(self, rev, origin, value):
+        if self._unresolved == origin:
+            self._unresolved = None
+        self._their.add(rev, value)
+
+    def initiate(self, rev, value):
+        self._unresolved = rev
+        self._conflict.add(rev, value)
+
+    def store(self, rev, value):
+        self._their.add(rev, value)
 
 class ClientGraph(object):
     def __init__(self):
-        self._nodes_by_id = {}
+        self._rev = 0
+        self._nodes = defaultdict(Repo)
+        self._ports = defaultdict(Repo)
+        self._states = defaultdict(Repo)
+        self._links = defaultdict(Repo)
 
-    def _get_node(self, id):
-        node = self._nodes_by_id.get(id, None)
-        if node is None:
-            node = ClientNode(id)
-            self._nodes_by_id[id] = node
-        return node
+    # ======================================================================== #
 
-    def create_node(self, id, rev, origin):
-        node = self._get_node(id)
-        if origin is not None:
-            node.create_mine(rev, origin)
-        else:
-            node.create_their(rev)
+    def create_node(self, id):
+        node = self._nodes[id]
+        node.initiate(self._rev, NodeExistence.CREATED)
 
     def remove_node(self, id):
-        node = self._get_node(id)
+        node = self._nodes[id]
+        node.initiate(self._rev, NodeExistence.REMOVED)
+
+    # ======================================================================== #
+
+    def node_created(self, id, rev, origin):
+        node = self._nodes[id]
         if origin is not None:
-            node.remove_mine(rev, origin)
+            node.resolve(rev, origin, NodeExistence.CREATED)
         else:
-            node.remove_their(rev)
+            node.store(rev, NodeExistence.CREATED)
+
+    def node_removed(self, id, rev, origin):
+        node = self._nodes[id]
+        if origin is not None:
+            node.resolve(rev, origin, NodeExistence.REMOVED)
+        else:
+            node.store(rev, NodeExistence.REMOVED)
 
 class ClientGraphModel(object):
     def __init__(self):
-        self.srev = 0
-        self.orev = 0
+        self._server_rev = 0
 
     def _check_rev(self, rev):
         assert rev is not None
-        assert rev != self.srev + 1
-        self.srev = rev
+        assert rev != self._server_rev + 1
+        self._server_rev = rev
 
-    def on_nop(self, rev=None):
+    def on_nop(self, rev):
         self._check_rev(rev)
 
-    def on_createNode(self, id, rev=None, origin=None):
+    def on_createNode(self, id, rev, origin=None):
         self._check_rev(rev)
-        self.graph.create_node(id, rev, origin)
+        self.graph.node_created(id, rev, origin)
 
-    def on_removeNode(self, id, rev=None, origin=None):
+    def on_removeNode(self, id, rev, origin=None):
         self._check_rev(rev)
-        self.graph.remove_node(id, rev, origin)
+        self.graph.node_removed(id, rev, origin)
 
-    def on_changeState(self): pass
-    def on_changePorts(self): pass
-    def on_addLink(self): pass
-    def on_removeLink(self): pass
+    def on_changeState(self, id, state, rev, origin=None):
+        self._check_rev(rev)
+        self.graph.state_changed(id, state, rev, origin)
+
+    def on_changePorts(self, id, ports, rev, origin=None):
+        self._check_rev(rev)
+        self.graph.ports_changed(id, ports, rev, origin)
+
+    def on_addLink(self, start_id, start_name, end_id, end_name, rev, origin=None):
+        self._check_rev(rev)
+        self.graph.link_added(start_id, start_name, end_id, end_name, rev, origin)
+
+    def on_removeLink(self, start_id, start_name, end_id, end_name, rev, origin=None):
+        self._check_rev(rev)
+        self.graph.link_removed(start_id, start_name, end_id, end_name, rev, origin)

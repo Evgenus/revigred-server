@@ -385,7 +385,7 @@ from functools import partial
 from enum import Enum
 from sentinels import NOTHING
 
-class NodeExistence(Enum):
+class Existence(Enum):
     CREATED = True
     REMOVED = False
 
@@ -424,15 +424,14 @@ class Repo(object):
     def __init__(self):
         self._their = self.branch_factory()
         self._conflict = self.branch_factory()
-        self._unresolved = None
+        self._unresolved = set()
 
     def resolve(self, rev, origin, value):
-        if self._unresolved == origin:
-            self._unresolved = None
+        self._unresolved.remove(origin)
         self._their.add(rev, value)
 
     def initiate(self, rev, value):
-        self._unresolved = rev
+        self._unresolved.add(rev)
         self._conflict.add(rev, value)
 
     def store(self, rev, value):
@@ -450,27 +449,57 @@ class ClientGraph(object):
 
     def create_node(self, id):
         node = self._nodes[id]
-        node.initiate(self._rev, NodeExistence.CREATED)
+        node.initiate(self._rev, Existence.CREATED)
 
     def remove_node(self, id):
         node = self._nodes[id]
-        node.initiate(self._rev, NodeExistence.REMOVED)
+        node.initiate(self._rev, Existence.REMOVED)
 
     # ======================================================================== #
 
-    def node_created(self, id, rev, origin):
+    def node_added(self, id, rev, origin):
         node = self._nodes[id]
         if origin is not None:
-            node.resolve(rev, origin, NodeExistence.CREATED)
+            node.resolve(rev, origin, Existence.CREATED)
         else:
-            node.store(rev, NodeExistence.CREATED)
+            node.store(rev, Existence.CREATED)
 
     def node_removed(self, id, rev, origin):
         node = self._nodes[id]
         if origin is not None:
-            node.resolve(rev, origin, NodeExistence.REMOVED)
+            node.resolve(rev, origin, Existence.REMOVED)
         else:
-            node.store(rev, NodeExistence.REMOVED)
+            node.store(rev, Existence.REMOVED)
+
+    def ports_changed(self, id, ports, rev, origin):
+        node = self._states[id]
+        if origin is not None:
+            node.resolve(rev, origin, ports)
+        else:
+            node.store(rev, ports)
+
+    def state_changed(self, id, state, rev, origin):
+        node = self._states[id]
+        if origin is not None:
+            node.resolve(rev, origin, state)
+        else:
+            node.store(rev, state)
+
+    def link_added(self, start_id, start_name, end_id, end_name, rev, origin):
+        key = (start_id, start_name, end_id, end_name)
+        link = self._links[key]
+        if origin is not None:
+            link.resolve(rev, origin, Existence.CREATED)
+        else:
+            link.store(rev, Existence.CREATED)
+
+    def link_removed(self, start_id, start_name, end_id, end_name, rev, origin):
+        key = (start_id, start_name, end_id, end_name)
+        link = self._links[key]
+        if origin is not None:
+            link.resolve(rev, origin, Existence.REMOVED)
+        else:
+            link.store(rev, Existence.REMOVED)
 
 class ClientGraphModel(object):
     def __init__(self):
@@ -486,7 +515,7 @@ class ClientGraphModel(object):
 
     def on_createNode(self, id, rev, origin=None):
         self._check_rev(rev)
-        self.graph.node_created(id, rev, origin)
+        self.graph.node_added(id, rev, origin)
 
     def on_removeNode(self, id, rev, origin=None):
         self._check_rev(rev)

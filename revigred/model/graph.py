@@ -432,6 +432,7 @@ class Repo(object):
         self._their = self.branch_factory()
         self._conflict = self.branch_factory()
         self._unresolved = set()
+        self._receivers = []
 
     def resolve(self, rev, origin, value):
         self._unresolved.remove(origin)
@@ -443,6 +444,20 @@ class Repo(object):
 
     def store(self, rev, value):
         self._their.add(rev, value)
+
+    def _publish(self, event, *args, **kwargs):
+        for callback in self._receivers:
+            callback(event, *args, **kwargs)
+
+    def subscribe(self, callback):
+        if callback in self._receivers:
+            return
+        self._receivers.append(callback)
+
+    def unsubscribe(self, callback):
+        if callback not in self._receivers:
+            return
+        self._receivers.remove(callback)
 
 class ClientGraph(object):
     repo_factory = Repo

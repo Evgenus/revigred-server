@@ -8,6 +8,8 @@ __all__ = [
     "Link",
     "Graph",
     "GraphModel",
+    "ClientGraph",
+    "ClientGraphModel",
     "NodeExists",
     "NoSuchNode",
     "NoSuchPort",

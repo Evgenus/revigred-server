@@ -30,3 +30,7 @@ def title(text, char="=", size=79):
     first = int((size - length)/2 - 3)
     last = size - 6 - first - length
     return '# ' + (char*first) + ' ' + text + ' ' + (char*last) + ' #'
+
+class DocDescribed(object):
+    def __str__(self):
+        return (self.__doc__ or "").strip().format(**self.__dict__)

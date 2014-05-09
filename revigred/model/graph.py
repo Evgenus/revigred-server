@@ -386,6 +386,10 @@ from enum import Enum
 from sentinels import NOTHING
 
 class Existence(Enum):
+    """
+    I've used this instead of True and False only for clarification reason,
+    because booleans are not self-described.
+    """
     CREATED = True
     REMOVED = False
 
@@ -455,6 +459,16 @@ class ClientGraph(object):
         node = self._nodes[id]
         node.initiate(self._rev, Existence.REMOVED)
 
+    def add_link(self, start_id, start_name, end_id, end_name):
+        key = (start_id, start_name, end_id, end_name)
+        link = self._links[key]
+        link.initiate(self._rev, Existence.CREATED)
+
+    def remove_link(self, start_id, start_name, end_id, end_name)
+        key = (start_id, start_name, end_id, end_name)
+        link = self._links[key]
+        link.initiate(self._rev, Existence.REMOVED)
+
     # ======================================================================== #
 
     def node_added(self, id, rev, origin):
@@ -493,7 +507,7 @@ class ClientGraph(object):
         else:
             link.store(rev, Existence.CREATED)
 
-    def link_removed(self, start_id, start_name, end_id, end_name, rev, origin):
+    def link_remove(self, start_id, start_name, end_id, end_name, rev, origin):
         key = (start_id, start_name, end_id, end_name)
         link = self._links[key]
         if origin is not None:

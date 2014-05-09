@@ -25,6 +25,12 @@ class User(object):
     def profile(self):
         return Record(id=self.id)
 
+    def dispatch(self, name, *args, **kwargs):
+        func = getattr(self, "on_" + name, None)
+        if func is None:
+            raise ValueError("command {} was not found".format(name))
+        func(*args, **kwargs)
+
     def channel_opened(self):
         self.send("auth", **self.profile)
 

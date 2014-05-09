@@ -464,7 +464,7 @@ class ClientGraph(object):
         link = self._links[key]
         link.initiate(self._rev, Existence.CREATED)
 
-    def remove_link(self, start_id, start_name, end_id, end_name)
+    def remove_link(self, start_id, start_name, end_id, end_name):
         key = (start_id, start_name, end_id, end_name)
         link = self._links[key]
         link.initiate(self._rev, Existence.REMOVED)

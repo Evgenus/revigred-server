@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from revigred.utils import DocDescribed
 from .users import Users
 
 __all__ = [
@@ -444,12 +445,13 @@ class Repo(object):
         self._their.add(rev, value)
 
 class ClientGraph(object):
+    repo_factory = Repo
     def __init__(self):
         self._rev = 0
-        self._nodes = defaultdict(Repo)
-        self._ports = defaultdict(Repo)
-        self._states = defaultdict(Repo)
-        self._links = defaultdict(Repo)
+        self._nodes = defaultdict(self.repo_factory)
+        self._ports = defaultdict(self.repo_factory)
+        self._states = defaultdict(self.repo_factory)
+        self._links = defaultdict(self.repo_factory)
 
     # ======================================================================== #
 
@@ -517,14 +519,37 @@ class ClientGraph(object):
         else:
             link.store(rev, Existence.REMOVED)
 
+class InvalidCommand(DocDescribed, ValueError):
+    "Command {name} was not found"
+    def __init__(self, name):
+        self.name = name
+
+class InvalidRevision(DocDescribed, Exception):
+    "Expected {expected} revision but got {got}"
+    def __init__(self, got, expected):
+        self.got = got
+        self.expected = expected
+
 class ClientGraphModel(object):
+    graph_factory = ClientGraph
     def __init__(self):
+        self._graph = self.graph_factory()
         self._server_rev = 0
 
+    @property
+    def graph(self):
+        return self._graph
+
+    def dispatch(self, name, *args, **kwargs):
+        func = getattr(self, "on_" + name, None)
+        if func is None:
+            raise InvalidCommand(name)
+        func(*args, **kwargs)
+
     def _check_rev(self, rev):
-        assert rev is not None
-        assert rev != self._server_rev + 1
-        self._server_rev = rev
+        if rev != self._server_rev:
+            raise InvalidRevision(self._server_rev, rev)
+        self._server_rev = rev + 1
 
     def on_nop(self, rev):
         self._check_rev(rev)

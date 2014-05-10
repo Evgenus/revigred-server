@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from revigred.utils import DocDescribed
 from .users import Users
@@ -388,6 +388,17 @@ from functools import partial
 from enum import Enum
 from sentinels import NOTHING
 
+class InvalidCommand(DocDescribed, ValueError):
+    "Command {name} was not found"
+    def __init__(self, name):
+        self.name = name
+
+class InvalidRevision(DocDescribed, Exception):
+    "Expected {expected} revision but got {got}"
+    def __init__(self, got, expected):
+        self.got = got
+        self.expected = expected
+
 class Existence(Enum):
     """
     I've used this instead of True and False only for clarification reason,
@@ -431,23 +442,25 @@ class Repo(object):
     def __init__(self):
         self._their = self.branch_factory()
         self._conflict = self.branch_factory()
-        self._unresolved = set()
+        self._unresolved = deque()
         self._receivers = []
 
     def resolve(self, rev, origin, value):
-        self._unresolved.remove(origin)
         self._their.add(rev, value)
+        expected = self._unresolved.popleft()
+        if expected != origin:
+            raise InvalidRevision(origin, expected)
 
     def initiate(self, rev, value):
-        self._unresolved.add(rev)
         self._conflict.add(rev, value)
+        self._unresolved.append(rev)
 
     def store(self, rev, value):
         self._their.add(rev, value)
 
     def _publish(self, event, *args, **kwargs):
         for callback in self._receivers:
-            callback(event, *args, **kwargs)
+            callback(this, event, *args, **kwargs)
 
     def subscribe(self, callback):
         if callback in self._receivers:
@@ -534,17 +547,6 @@ class ClientGraph(object):
         else:
             link.store(rev, Existence.REMOVED)
 
-class InvalidCommand(DocDescribed, ValueError):
-    "Command {name} was not found"
-    def __init__(self, name):
-        self.name = name
-
-class InvalidRevision(DocDescribed, Exception):
-    "Expected {expected} revision but got {got}"
-    def __init__(self, got, expected):
-        self.got = got
-        self.expected = expected
-
 class ClientGraphModel(object):
     graph_factory = ClientGraph
     def __init__(self):
@@ -563,7 +565,7 @@ class ClientGraphModel(object):
 
     def _check_rev(self, rev):
         if rev != self._server_rev:
-            raise InvalidRevision(self._server_rev, rev)
+            raise InvalidRevision(rev, self._server_rev)
         self._server_rev = rev + 1
 
     def on_nop(self, rev):

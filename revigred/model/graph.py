@@ -245,6 +245,111 @@ class Graph(object):
         if not self.has_link(start_id, start_name, end_id, end_name):
             raise Confirm() from NoSuchLink(start_id, start_name, end_id, end_name)
 
+class GraphTransaction(object):
+    def __init__(self, graph, model):
+        self._graph = graph
+        self._model = model
+
+        self._nodes_by_id = {}
+        self._removed_nodes = set()
+
+        self._links_by_key = {}
+        self._removed_links = set()
+        self._links_by_start_id = defaultdict(dict)
+        self._links_by_end_id = defaultdict(dict)
+
+    def has_node(self, id):
+        if id in self._nodes_by_id:
+            return True
+        if id in self._removed_nodes:
+            return False
+        return self._graph.has_node(id)
+
+    def get_node(self, id):
+        if id in self._nodes_by_id:
+            return self._nodes_by_id[id]
+        if id in self._removed_nodes:
+            return KeyError(id)
+        return self._graph.get_node(id)
+
+    def add_node(self, node):
+        self._nodes_by_id[node.id] = node
+        # wierd (adding previously removed node)
+        if node.id in self._removed_nodes: 
+            self._removed_nodes.remove(node.id)
+
+    def remove_node(self, id):
+        self._removed_nodes.add(id)
+        if id in self._nodes_by_id:
+            del self._nodes_by_id[id]
+
+    def has_link(self, start_id, start_name, end_id, end_name):
+        key = (start_id, start_name, end_id, end_name)
+        if key in self._links_by_key:
+            # created or changed
+            return True
+        if key in self._removed_links:
+            # removed
+            return False
+        # previously exists
+        return self._graph.has_link(start_id, start_name, end_id, end_name)
+
+    def get_link(self, start_id, start_name, end_id, end_name):
+        key = (start_id, start_name, end_id, end_name)
+        if key in self._links_by_key:
+            # created or changed
+            return self._links_by_key[key]
+        if key in self._removed_links:
+            # removed
+            return KeyError(key)
+        # previously exists
+        return self._graph.get_link(start_id, start_name, end_id, end_name)        
+
+    def add_link(self, link):
+        key = (link.start_id, link.start_name, link.end_id, link.end_name)
+        self._links_by_start_id[link.start_id][key] = link
+        self._links_by_end_id[link.end_id][key] = link
+        self._links_by_key[key] = link
+        # wierd (adding previously removed link)
+        if key in self._removed_links: 
+            self._removed_links.remove(key)
+
+    def remove_link(self, start_id, start_name, end_id, end_name):
+        key = (start_id, start_name, end_id, end_name)
+        self._removed_links.add(key)
+        if id in self._links_by_key:
+            del self._links_by_key[key]
+            del self._links_by_start_id[start_id][key]
+            del self._links_by_end_id[end_id][key]
+
+    def find_links_startswith(self, start_id):
+        for link in self._graph.find_links_startswith(start_id):
+            key = (link.start_id, link.start_name, link.end_id, link.end_name)
+            # link is removed
+            if key in self._removed_links: 
+                continue
+            # link has new state
+            if key in self._links_by_start_id[start_id]: 
+                continue
+            # old link
+            yield link
+        # all new or changed links
+        yield from list(self._links_by_start_id[start_id].values())
+
+    def find_links_endswith(self, end_id):
+        for link in self._graph.find_links_endswith(start_id):
+            key = (link.start_id, link.start_name, link.end_id, link.end_name)
+            # link is removed
+            if key in self._removed_links: 
+                continue
+            # link has new state
+            if key in self._links_by_end_id[start_id]: 
+                continue
+            # old link
+            yield link
+        # all new or changed links
+        yield from list(self._links_by_end_id[end_id].values())
+
 # ____________________________________________________________________________ #
 
 class GraphModel(Users):

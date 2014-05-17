@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1-beta1/jquery.js"
+            type="text/javascript"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/json5/0.3.0/json5.min.js"
+            type="text/javascript"></script>
+
+        <script type="text/javascript">
+            $(function() {
+                var isopen = false;
+                var username = null;
+                var socket = null;
+
+
+                var messages = $("#messages");
+
+                var writeEvent = function(text) 
+                {
+                    messages.append(text + "\n");
+                }
+
+                var message = $("#message");
+                $("#form").on("submit", function() 
+                {
+                    writeEvent(">" + message.val());
+                    socket.send(message.val());
+                    message.val("");
+                    return false;
+                });              
+
+                var initialize = function() 
+                {
+                    socket = new WebSocket("ws://127.0.0.1:9000");
+                    socket.binaryType = "arraybuffer";
+
+                    socket.onopen = function() 
+                    {
+                        writeEvent("Connected!");
+                        isopen = true;
+                    }
+
+                    socket.onmessage = function(e) 
+                    {
+                        if (typeof e.data == "string") 
+                        {
+                            writeEvent(e.data);
+                        } else {
+                            writeEvent("Binary message received!");
+                        }
+                    }
+
+                    socket.onclose = function(e) 
+                    {
+                        writeEvent("Connection closed.");
+                        socket = null;
+                        isopen = false;
+                        setTimeout(function() {
+                            writeEvent("Reconnecting...");
+                            initialize();
+                        }, 1000);
+                    }
+                }
+                initialize();
+            });
+        </script>
+        <style>
+            #messages {
+                width: 500px;
+                height: 500px;
+            }
+
+            #message {
+                width: 400px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1 id="username">Anonymous</h1>
+        <textarea id="messages"></textarea>
+        <form id="form">
+            <input id="message" type="text"/>
+            <input type="submit" value="Send">
+        </form>
+    </body>
+</html>

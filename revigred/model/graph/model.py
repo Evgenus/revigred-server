@@ -1,5 +1,9 @@
 from revigred.utils import DocDescribed
-from revigred.model.users import Users
+from revigred.model.users import (
+    Users,
+    User,
+    Origin,
+    )
 from .storage import Graph
 from .events import *
 
@@ -7,8 +11,18 @@ __all__ = [
     "GraphModel",
 ]
 
+class GraphUser(User):
+    def dispatch(self, name, *args, **kwargs):
+        rev = kwargs.pop("rev")
+        func = getattr(self.model, "on_" + name, None)
+        if func is None:
+            raise ValueError("command {} was not found")
+        origin = Origin(self, rev)
+        func(origin, *args, **kwargs)
+
 class GraphModel(Users):
     graph_factory = Graph
+    user_factory = GraphUser
 
     def __init__(self):
         super().__init__()
@@ -30,7 +44,6 @@ class GraphModel(Users):
     def link_removed(self, key): pass
 
     # ======================================================================== #
-
 
     def on_nodeCreated(self, origin, id):
         try:

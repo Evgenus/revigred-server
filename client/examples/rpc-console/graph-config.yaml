@@ -1,0 +1,47 @@
+# Meta
+--- !TypesTable
+class:
+  type: !resolve builtins.type
+  load: !resolve metaconfig.construct_from_sequence
+...
+
+# Meta
+--- !TypesTable
+"tag:yaml.org,2002:map":
+  type: !resolve revigred.record.Record
+  load: !resolve metaconfig.construct_from_mapping
+...
+
+--- !TypesTable
+GraphModel:
+  type: !resolve revigred.model.graph.GraphModel
+  load: !resolve metaconfig.construct_from_mapping
+FSGraphModel:
+  type: !resolve revigred.model.graph.fs.FSGraphModel
+  load: !resolve metaconfig.construct_from_mapping
+...
+
+--- !TypesTable
+NestedSetup:
+  type: !resolve logbook.NestedSetup
+  load: !resolve metaconfig.construct_from_any
+StreamHandler:
+  type: !resolve logbook.StreamHandler
+  load: !resolve metaconfig.construct_from_mapping
+Logger:
+  type: !resolve logbook.Logger
+  load: !resolve metaconfig.construct_from_string
+...
+
+--- !add_dependencies
+server:
+  logging:
+    logger: !Logger revigred.Server
+    handler: !NestedSetup
+    - !StreamHandler
+      stream: !resolve sys.stdout
+      format_string: '[{record.time:%Y-%m-%d %H:%M}] {record.level_name:8s}: {record.channel}: {record.message}'
+  host: 127.0.0.1
+  port: 9000
+  model: !FSGraphModel {}
+...

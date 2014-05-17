@@ -5,7 +5,21 @@ from revigred.record import Record
 __all__ = [
     "User",
     "Users",
+    "Origin",
     ]
+
+class Origin(object):
+    def __init__(self, user, rev):
+        self._user = user
+        self._rev = rev
+
+    @property
+    def user(self):
+        return self._user
+
+    @property
+    def rev(self):
+        return self._rev
 
 class User(object):
     def __init__(self, model):

@@ -27,6 +27,8 @@ class FSGraph(Graph):
             self.walk(link.end_id, nodes, links)
 
 class FSGraphModel(GraphModel):
+    graph_factory = FSGraph
+    
     def on_nodeCreated(self, origin, id):
         node = self.graph.node_factory(id)
         node.set_state({

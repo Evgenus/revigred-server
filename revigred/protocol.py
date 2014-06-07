@@ -22,7 +22,7 @@ class ServerProtocol(WebSocketServerProtocol):
             pass
         else:
             message = json.loads(payload.decode('utf8'))
-            self.logger.debug("Text message received from {0}: {1}", self.client.name, payload.decode('utf8'))
+            self.logger.debug("Text message received from {0}: {1}", self.client, payload.decode('utf8'))
             name, args, kwargs = message
             self.client.dispatch(name, *args, **kwargs)
 
